@@ -42,8 +42,10 @@ rm -f .env
 # Control Plane Cluster #
 #########################
 
+# creating kind cluster with kind.yaml config
 kind create cluster --config kind.yaml
 
+# installing the Ingress-Nginx Controller
 kubectl apply \
     --filename https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 
@@ -51,10 +53,12 @@ kubectl apply \
 # Crossplane #
 ##############
 
+# Installing the Crossplane Helm chart
 helm upgrade --install crossplane crossplane \
     --repo https://charts.crossplane.io/stable \
     --namespace crossplane-system --create-namespace --wait
 
+# Providers constantly watch the state of the desired managed resources and create any external resources that are missing.
 kubectl apply \
     --filename providers/provider-kubernetes-incluster.yaml
 
@@ -74,7 +78,7 @@ kubectl wait --for=condition=healthy provider.pkg.crossplane.io \
 
 echo "## Which Hyperscaler do you want to use?" | gum format
 
-HYPERSCALER=$(gum choose "google" "aws" "azure")
+HYPERSCALER="aws"
 
 echo "export HYPERSCALER=$HYPERSCALER" >> .env
 
@@ -152,10 +156,13 @@ aws_access_key_id = $AWS_ACCESS_KEY_ID
 aws_secret_access_key = $AWS_SECRET_ACCESS_KEY
 " >aws-creds.conf
 
+# Providers use a Kubernetes Secret to connect the credentials to the provider.
+# https://docs.crossplane.io/latest/getting-started/provider-aws/#create-a-kubernetes-secret-for-aws
     kubectl --namespace crossplane-system \
         create secret generic aws-creds \
         --from-file creds=./aws-creds.conf
-
+# This attaches the AWS credentials, saved as a Kubernetes secret, as a secretRef.
+# https://docs.crossplane.io/latest/getting-started/provider-aws/#create-a-providerconfig
     kubectl apply --filename providers/aws-config.yaml
 
 else
@@ -245,9 +252,8 @@ REPO_URL=$(echo $REPO_URL | sed 's/git@github.com:/https:\/\/github.com\//') # r
 
 yq --inplace ".spec.source.repoURL = \"$REPO_URL\"" argocd/apps.yaml
 
-helm upgrade --install argocd argo-cd \
-    --repo https://argoproj.github.io/argo-helm \
-    --namespace argocd --create-namespace \
-    --values argocd/helm-values.yaml --wait
+# Installing Argo CD via Helm chart
+helm upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-helm --namespace argocd --create-namespace --values argocd/helm-values.yaml --wait
 
+# Configuring ArgoCD to listen to changes in the a-team folder of my remote git repository
 kubectl apply --filename argocd/apps.yaml
